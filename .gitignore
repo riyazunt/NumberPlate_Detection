@@ -1,7 +1,10 @@
 /tfod
-/runs/detect/*/
-/runs/train/*/
-/runs/val/*/
+/runs/detect/exp
+/runs/detect/exp2
+/runs/detect/exp3
+/runs/detect/exp4
+/runs/train/exp
+/runs/val/exp
 /detected_images
 detection_results.csv
 /.ipynb_checkpoints

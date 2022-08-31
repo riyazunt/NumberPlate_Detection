@@ -1,6 +1,0 @@
-/tfod
-/detected_images
-detection_results.csv
-/.ipynb_checkpoints
-/ipynb_checkpoints
-.ipynb_checkpoints

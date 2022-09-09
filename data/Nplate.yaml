@@ -4,4 +4,8 @@ val: data/imagelabel/images/val  # val images (relative to 'path') 128 images
 
 # Classes
 names:
-  0: Plate
+  0: Private
+  1: Transport
+  2: Rent
+  3: Electric
+  4: Military

@@ -171,10 +171,16 @@ def run(
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                     
                 cropped = imc[int(det[0][1]):int(det[0][3]), int(det[0][0]):int(det[0][2])]
+                bigger = cv2.resize(cropped, (416, 208))
+                
+                alpha = 2.5 # Contrast control (1.0-3.0)
+                beta = 30 # Brightness control (0-100)
+
+                adjusted = cv2.convertScaleAbs(bigger, alpha=alpha, beta=beta)
             
                 reader = easyocr.Reader(['en'])
                 ocr_result = []
-                ocr_result = reader.readtext(cropped)
+                ocr_result = reader.readtext(adjusted)
                 if ocr_result != []:
                     text_plate = ocr_result[0][1]
                     cl = int(det[0][5])
@@ -183,7 +189,7 @@ def run(
                     print(class_)
                     if os.path.isdir('detected_images') is False: 
                         os.mkdir('detected_images') 
-                    save_results(text_plate, cropped, class_, 'detection_results.csv', 'detected_images/')
+                    save_results(text_plate, bigger, class_, 'detection_results.csv', 'detected_images/')
                 else:
                     text_plate = ''
 

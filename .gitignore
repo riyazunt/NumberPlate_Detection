@@ -3,4 +3,6 @@
 detection_results.csv
 /.ipynb_checkpoints
 /ipynb_checkpoints
+/mmocr
+/configs
 .ipynb_checkpoints

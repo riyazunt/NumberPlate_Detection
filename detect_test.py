@@ -25,8 +25,12 @@ Usage - formats:
 """
 
 import cv2
+import pytesseract
 import easyocr
+from mmocr.utils.ocr import MMOCR
+import mmocr
 import matplotlib.pyplot as plt
+# %matplotlib inline
 import numpy as np
 import argparse
 import os
@@ -35,8 +39,10 @@ import sys
 from pathlib import Path
 import csv
 import uuid
-
 import torch
+import torchvision
+import torchvision.transforms as T
+
 import torch.backends.cudnn as cudnn
 
 FILE = Path(__file__).resolve()
@@ -150,18 +156,10 @@ def run(
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
-            if len(det):
-
-                def save_results(text, crp_img, class_, csv_filename, folder_path):
-                    image_name = '{}.jpg'.format(uuid.uuid1())
-
-                    cv2.imwrite(os.path.join(folder_path, image_name), crp_img)
-
-                    with open(csv_filename, mode='a', newline='') as f:
-                        csv_writer = csv.writer(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                        csv_writer.writerow([image_name, text, class_])
-
-
+            
+            
+            if len(det):     
+         
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
 
@@ -169,45 +167,73 @@ def run(
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                    
-                cropped = imc[int(det[0][1]):int(det[0][3]), int(det[0][0]):int(det[0][2])]
-                bigger = cv2.resize(cropped, (416, 208))
-                
-                alpha = 2.5 # Contrast control (1.0-3.0)
-                beta = 30 # Brightness control (0-100)
-
-                adjusted = cv2.convertScaleAbs(bigger, alpha=alpha, beta=beta)
-            
-                reader = easyocr.Reader(['en'])
-                ocr_result = []
-                ocr_result = reader.readtext(adjusted)
-                if ocr_result != []:
-                    text_plate = ocr_result[0][1]
-                    cl = int(det[0][5])
-                    class_ = names[cl]
-                    print(text_plate)
-                    print(class_)
-                    if os.path.isdir('detected_images') is False: 
-                        os.mkdir('detected_images') 
-                    save_results(text_plate, bigger, class_, 'detection_results.csv', 'detected_images/')
-                else:
-                    text_plate = ''
-
+  
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
+                    
+                    # saving detected portion and write results to csv          
                     if save_txt:  # Write to file
+                        
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        with open(f'{txt_path}.txt', 'a') as f:
+                        with open(f'recognized.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
+                        
                     if save_img or save_crop or view_img:  # Add bbox to image
+                        
+                        def save_results(text, crp_img, class_, csv_filename, folder_path):
+                            image_name = '{}.jpg'.format(uuid.uuid1())
+
+                            cv2.imwrite(os.path.join(folder_path, image_name), crp_img)
+
+                            with open(csv_filename, mode='a', newline='') as f:
+                                csv_writer = csv.writer(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                                csv_writer.writerow([image_name, text, class_])
+                    
+#                     if save_crop:
                         c = int(cls)  # integer class
-                        label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f} {text_plate}')
+                        save_one_box(xyxy, imc, file=save_dir/'crops'/f'{p.stem}_{names[c]}.jpg', BGR=True)
+                        
+                        crp_img = imc[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+
+                        bigger = cv2.resize(crp_img, (416, 208))
+                        bfilter = cv2.bilateralFilter(bigger, 11, 17, 17)
+
+                        # gray = cv2.cvtColor(bigger, cv2.COLOR_BGR2GRAY)  
+
+                        alpha = 1.2 # Contrast control (1.0-3.0)
+                        beta = 0 # Brightness control (0-100)
+                        adjusted = cv2.convertScaleAbs(bfilter, alpha=alpha, beta=beta)
+
+                        # cv2.imshow('adjusted', adjusted)
+                        # cv2.waitKey(0)
+                        # cv2.destroyAllWindows()
+
+                        # mmocr = MMOCR(det=None, recog='CRNN_TPS')
+                        # mmocr = MMOCR(det='PS_CTW', recog='SAR', kie='SDMGR')
+                        mmocr = MMOCR(det='TextSnake', recog='SAR')
+                        # mmocr = MMOCR(det='TextSnake', recog='SAR', kie='SDMGR', config_dir='/home/riyaz/Desktop/Nplate_project_1/Nplate_Detection/mmocr/configs/')
+                        text = mmocr.readtext(adjusted, print_result=False, output='outputs/test.jpg')
+
+                        # reader = easyocr.Reader(['en'])
+                        # ocr_result = []
+                        # ocr_result = reader.readtext(bfilter)
+
+                        if text != []:
+                            text_plate = text[0]['text']
+                            print(text_plate)
+                            print(names[c])
+                            print(conf)
+                            if os.path.isdir('detected_images') is False: 
+                                os.mkdir('detected_images') 
+                            save_results(text_plate, bigger, names[c], 'detection_results.csv', 'detected_images/')
+                        else:
+                            text_plate = ''   
+
+                        label = None if hide_labels else (names[c] if hide_conf else f'{conf:.2f}{names[c]}{text_plate}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
-                    if save_crop:
-                        save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)   
-                                      
+                
+
 	        
             # Stream results
             im0 = annotator.result()
@@ -216,8 +242,13 @@ def run(
                     windows.append(p)
                     cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
                     cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
+
                 cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
+                cv2.waitKey(1) # 1 millisecond
+                key = cv2.waitKey(5)
+                if key == 27:    
+                    vid_cap.release()
+                    cv2.destroyAllWindows() 
 
             # Save results (image with detections)
             if save_img:
@@ -249,7 +280,7 @@ def run(
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
-        strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
+        strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)   
 
 
 def parse_opt():

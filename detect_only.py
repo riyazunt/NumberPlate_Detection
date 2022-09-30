@@ -174,26 +174,6 @@ def run(
                 for *xyxy, conf, cls in reversed(det):
                     
                     # saving detected portion and write results to csv          
-                    if save_txt:  # Write to file
-                        
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        with open(f'recognized.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
-                        
-                    if save_img or save_crop or view_img:  # Add bbox to image
-                        
-                        def save_results(text, crp_img, class_, csv_filename, folder_path):
-                            image_name = '{}.jpg'.format(uuid.uuid1())
-
-                            cv2.imwrite(os.path.join(folder_path, image_name), crp_img)
-
-                            with open(csv_filename, mode='a', newline='') as f:
-                                csv_writer = csv.writer(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                                csv_writer.writerow([image_name, text, class_])
-                    
-#                     if save_crop:
-
                         def brightness(im_file):
                             im = Image.open(im_file)
                             stat = ImageStat.Stat(im)
@@ -201,7 +181,6 @@ def run(
                             return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
 
                         c = int(cls)  # integer class
-                        save_one_box(xyxy, imc, file=save_dir/'crops'/f'{p.stem}_{names[c]}.jpg', BGR=True)
                         
                         crp_img = imc[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
 
@@ -219,30 +198,12 @@ def run(
                         bigger = cv2.resize(crp_img, (416, 208))
                         bfilter = cv2.bilateralFilter(bigger, 11, 17, 17)
 
-                        # gray = cv2.cvtColor(bigger, cv2.COLOR_BGR2GRAY)  
-  
-                        # cv2.imshow('adjusted', adjusted)
-                        # cv2.waitKey(0)
-                        # cv2.destroyAllWindows()
-
-                        # mmocr = MMOCR(det=None, recog='CRNN_TPS')
-                        # mmocr = MMOCR(det='PS_CTW', recog='SAR', kie='SDMGR')
                         mmocr = MMOCR(det='TextSnake', recog='SAR')
-                        # mmocr = MMOCR(det='TextSnake', recog='SAR', kie='SDMGR', config_dir='/home/riyaz/Desktop/Nplate_project_1/Nplate_Detection/mmocr/configs/')
-                        text = mmocr.readtext(bfilter, print_result=False, output='outputs/test.jpg')
-
-                        # reader = easyocr.Reader(['en'])
-                        # ocr_result = []
-                        # ocr_result = reader.readtext(bfilter)
+                        text = mmocr.readtext(bfilter, print_result=False)
 
                         if text != []:
                             text_plate = text[0]['text']
-                            print(text_plate)
-                            print(names[c])
-                            print(conf)
-                            if os.path.isdir('detected_images') is False: 
-                                os.mkdir('detected_images') 
-                            save_results(text_plate, bigger, names[c], 'detection_results.csv', 'detected_images/')
+
                         else:
                             text_plate = ''   
 
@@ -287,30 +248,30 @@ def run(
             
 
         # Print time (inference-only)
-        LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
+        # LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
 
     # Print results
-    t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
-    LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
-    if save_txt or save_img:
-        s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
-        LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
-    if update:
-        strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)   
+    # t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
+    # LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
+    # if save_txt or save_img:
+    #     s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
+    #     LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
+    # if update:
+    #     strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)   
 
 
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
-    parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default= 0, help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
-    parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.60, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='show results')
-    parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
+    # parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
